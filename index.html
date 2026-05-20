@@ -637,9 +637,38 @@
 7. LOOP (0:28–0:30) — A teaser question that loops the viewer back
 
 For each shot, provide:
-- A VO line (the narration that ElevenLabs will read)
+- A VO line (the narration that ElevenLabs will read), formatted with ElevenLabs prompt controls (see below)
 - A COMIC PANEL description (the visual for image generation) — vertical 9:16 composition, leave empty space for camera moves, NO text or labels in the image
 - A CAMERA MOVE (push-in, pull-out, tilt up, diagonal drift, whip-pan, etc.) — each shot should flow into the next via matched motion or composition
+
+ELEVENLABS VO FORMATTING RULES (apply to every "vo" field):
+
+PAUSES:
+- Use ellipses "..." for dramatic mid-sentence pauses (lands well in v3/Multilingual v2)
+- Use "<break time=\\"0.5s\\" />" or "<break time=\\"1s\\" />" for precise pauses between sentences
+- Commas create natural micro-pauses
+
+EMPHASIS & EMOTION:
+- Wrap emphasized words in CAPS sparingly (1-2 per line max): "could outlive YOU"
+- Use audio tags in square brackets at the start of phrases for emotion: [whispers], [curious], [excited], [serious], [softly], [thoughtful]
+- Place audio tags BEFORE the text they affect
+
+PACING:
+- Use em dashes "—" for medium-length pauses with momentum
+- Short sentences create urgency; longer flowing sentences build mystery
+- Aim for natural cadence when read aloud
+
+PRONUNCIATION:
+- For tricky words, use phonetic spelling in parentheses after the word, e.g., "Vantablack (van-tah-black)"
+- For scientific/foreign terms, spell out clearly or use IPA-style hints
+
+MODEL NOTES (for the writer's use):
+- Optimize for Eleven v3 (most expressive) or Multilingual v2
+- Voice direction: mysterious, slightly conspiratorial, like sharing a secret
+- Recommended settings: Stability 40-45, Similarity 75-85, Style 20-35, Speaker Boost ON
+
+EXAMPLE VO LINE:
+[curious] Archaeologists opened a 3,000-year-old tomb... and found honey that was still — somehow — perfectly edible.
 
 Tone: mysterious, slightly conspiratorial, like sharing a secret. Use ellipses for dramatic pauses. Make it specific and visual, not generic.
 
@@ -653,7 +682,7 @@ OUTPUT FORMAT: Respond ONLY with valid JSON, no markdown, no preamble. Use this 
       "shotNumber": 1,
       "shotLabel": "HOOK",
       "timeRange": "0:00–0:02",
-      "vo": "VO line for this shot",
+      "vo": "VO line WITH ElevenLabs controls baked in (audio tags, ellipses, emphasis, etc.)",
       "comicPanel": "Detailed visual description of the comic panel",
       "cameraMove": "Detailed camera move description"
     },
@@ -695,57 +724,74 @@ OUTPUT FORMAT: Respond ONLY with valid JSON, no markdown, no preamble. Use this 
 
   function buildStage1Prompt(script) {
     const hookShot = script.shots[0];
-    return `**TASK:** Generate ONE single still image to serve as a visual style reference for a video series. Do not generate a video. Do not generate multiple images. Generate exactly ONE static illustration.
+    return `TASK: Generate ONE single still image to serve as a visual style reference for a video series. Do not generate a video. Do not generate multiple images. Generate exactly ONE static illustration.
 
-**SUBJECT:** ${hookShot.comicPanel}
+SUBJECT: ${hookShot.comicPanel}
 
-**STYLE REQUIREMENTS (strict):**
+STYLE REQUIREMENTS (strict):
 ${GLOBAL_STYLE_GUIDE(script.palette)}
 
-**HARD CONSTRAINTS — STRICTLY ENFORCED:**
+HARD CONSTRAINTS — STRICTLY ENFORCED:
 ${HARD_CONSTRAINTS_IMAGE}
 
-**COMPOSITION:**
+COMPOSITION:
 - Full-bleed illustration — the image must extend edge-to-edge with no border or frame
 - Zero letters, zero numbers, zero written symbols anywhere in the frame
 - Any background decorative elements must be simple stylized shapes, not readable text or characters
 - All object surfaces must be smooth and unmarked
 
-**FORMAT:** 9:16 vertical, 2160×3840px minimum`;
+FORMAT: 9:16 vertical, 2160×3840px minimum`;
   }
 
   function buildStage2Prompt(script) {
     const otherShots = script.shots.slice(1);
     let imagesBlock = '';
     otherShots.forEach((shot, i) => {
-      imagesBlock += `\n**Image ${shot.shotNumber} — ${shot.shotLabel}:**\n${shot.comicPanel}\n`;
+      imagesBlock += `\nImage ${shot.shotNumber} — ${shot.shotLabel}:\n${shot.comicPanel}\n`;
     });
 
-    return `**TASK:** Generate 6 separate still images, one at a time, each matching the style of the attached reference image EXACTLY. Generate static illustrations only — no video, no animation.
+    return `TASK: Generate 6 separate still images, one at a time, each matching the style of the attached reference image EXACTLY. Generate static illustrations only — no video, no animation.
 
-**STYLE LOCK:** Match the attached reference image's style precisely — same comic book aesthetic, same ink line weight, same halftone shading style, same color palette (${script.palette}), same level of stylization. This is non-negotiable.
+STYLE LOCK: Match the attached reference image's style precisely — same comic book aesthetic, same ink line weight, same halftone shading style, same color palette (${script.palette}), same level of stylization. This is non-negotiable.
 
-**HARD CONSTRAINTS (apply to ALL 6 images):**
+HARD CONSTRAINTS (apply to ALL 6 images):
 ${HARD_CONSTRAINTS_IMAGE}
 ❌ NO animation, NO video — static images only
 ❌ NO characters with open mouths or speaking expressions
 ✅ Each image is a single, silent, static, full-bleed comic illustration
 
-**FORMAT:** 9:16 vertical, 2160×3840px minimum per image.
+FORMAT: 9:16 vertical, 2160×3840px minimum per image.
 
-**GENERATE THESE 6 IMAGES (one at a time):**
+GENERATE THESE 6 IMAGES (one at a time):
 ${imagesBlock}`;
   }
 
   function buildClipPrompt(shot) {
-    return `Apply a ${shot.cameraMove.toLowerCase().startsWith('apply') ? shot.cameraMove.replace(/^apply a /i, '') : shot.cameraMove} to this still image. Duration: 6 seconds. Constant smooth speed. The image itself must remain completely static — no animated elements, no moving particles, no character movement, no eye blinks, no mouth movement. Only the camera moves.
+    const cameraMove = shot.cameraMove.toLowerCase().startsWith('apply')
+      ? shot.cameraMove.replace(/^apply a /i, '').replace(/^apply /i, '')
+      : shot.cameraMove;
+    return `Turn into a video and apply a ${cameraMove} to this still image. Duration: 6 seconds. Constant smooth speed. The image itself must remain completely static — no animated elements, no moving particles, no character movement, no eye blinks, no mouth movement. Only the camera moves.
 
 ${HARD_CONSTRAINTS_VIDEO}`;
   }
 
   function buildVoScript(script) {
-    let block = `# THE BRAIN MORSEL — ${script.title}\n## VO SCRIPT FOR ELEVENLABS\n\n`;
-    block += `Voice direction: Mysterious, slightly conspiratorial, like sharing a secret. Settings: Stability 40-45, Similarity 75-85, Style 20-35.\n\n---\n\n`;
+    let block = `THE BRAIN MORSEL — ${script.title}\n`;
+    block += `VO SCRIPT FOR ELEVENLABS\n`;
+    block += `${'='.repeat(60)}\n\n`;
+    block += `MODEL: Eleven v3 (best) or Multilingual v2\n`;
+    block += `VOICE: Pick a mysterious, narrator-style voice. Lock the same voice across all episodes.\n`;
+    block += `SETTINGS: Stability 40-45 · Similarity 75-85 · Style 20-35 · Speaker Boost ON\n`;
+    block += `DIRECTION: Mysterious, slightly conspiratorial, like sharing a secret\n\n`;
+    block += `PROMPT CONTROLS IN USE:\n`;
+    block += `· Audio tags in [brackets] for emotion ([curious], [whispers], [softly], etc.)\n`;
+    block += `· Ellipses "..." for dramatic mid-sentence pauses\n`;
+    block += `· <break time="0.5s" /> tags for precise pauses\n`;
+    block += `· CAPS on 1-2 words per line for emphasis\n`;
+    block += `· Em dashes "—" for medium pauses with momentum\n`;
+    block += `· Phonetic spelling in (parentheses) for tricky words\n\n`;
+    block += `TIP: Generate each shot as a separate clip in ElevenLabs (easier sync), OR paste the full\nscript as one generation and split on the editing timeline.\n\n`;
+    block += `${'='.repeat(60)}\n\n`;
     script.shots.forEach(shot => {
       block += `[Shot ${shot.shotNumber} — ${shot.shotLabel} — ${shot.timeRange}]\n${shot.vo}\n\n`;
     });
@@ -753,10 +799,17 @@ ${HARD_CONSTRAINTS_VIDEO}`;
   }
 
   function buildCaptionScript(script) {
-    let block = `# THE BRAIN MORSEL — ${script.title}\n## CAPTION SUGGESTIONS (Komika Axis, orange emphasis + white body)\n\n`;
+    let block = `THE BRAIN MORSEL — ${script.title}\n`;
+    block += `CAPTION SUGGESTIONS (Komika Axis, orange emphasis + white body)\n`;
+    block += `${'='.repeat(60)}\n\n`;
     script.shots.forEach(shot => {
-      // Pick 2-4 punchy words from the VO
-      const words = shot.vo.replace(/[.,!?…"]/g, '').split(/\s+/).filter(w => w.length > 3);
+      // Strip ElevenLabs tags + punctuation before picking caption words
+      const cleanedVo = shot.vo
+        .replace(/\[[^\]]*\]/g, '')         // remove [audio tags]
+        .replace(/<[^>]*>/g, '')             // remove <break> tags
+        .replace(/[.,!?…"():]/g, '')         // remove punctuation
+        .trim();
+      const words = cleanedVo.split(/\s+/).filter(w => w.length > 3);
       const caption = words.slice(0, 3).join(' ').toUpperCase();
       block += `[Shot ${shot.shotNumber} — ${shot.shotLabel}]\nVO: ${shot.vo}\nSuggested caption: "${caption || 'ADD CAPTION HERE'}"\n\n`;
     });
